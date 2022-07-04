@@ -135,5 +135,5 @@ in Application project , press 'z' , 'Z' will reset to Boot loader
 
 9. under application project , below is sct file content ( start address : 0x3000)
 
-![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/LDROM_KEIL_sct.jpg)
+![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/application_KEIL_sct.jpg)
 
