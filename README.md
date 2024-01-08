@@ -32,6 +32,8 @@ update @ 2022/07/04
 				
 		- if two checksum result are different , will stuck in Boot loader , and wait for ISP code update
 		
+		- press digit 1 , to erase checksum , return to Boot loader , and wait for ISP code update
+		
 ![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/LDROM_checksum_err.jpg)		
 		
 		- if boot from application code , to LDROM code , by press digit Z
