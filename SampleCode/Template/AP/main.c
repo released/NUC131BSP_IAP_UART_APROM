@@ -12,6 +12,8 @@ volatile uint32_t BitFlag = 0;
 volatile uint32_t counter_tick = 0;
 volatile uint32_t counter_systick = 0;
 
+uint8_t FLAG_PROJ_ERASE_CHECKSUM = 0;
+
 #define PLL_CLOCK           50000000
 
 #if defined (ENABLE_TICK_EVENT)
@@ -34,13 +36,13 @@ volatile uint8_t _sys_uTimerEventCount = 0;             /* Speed up interrupt re
 
 #define APROM_APPLICATION_START     		    (0x00003000UL)
 
-#define APROM_FW_VER_ADDR      		            (APROM_APPLICATION_START+FMC_FLASH_PAGE_SIZE)
-//put F/W verison at 2nd page , for indicator
-#if defined (APROM_1)
-const uint8_t FW_Version[] __attribute__((at(APROM_FW_VER_ADDR))) = "FW_VER_V001.001";
-#elif defined (APROM_2)
-const uint8_t FW_Version[] __attribute__((at(APROM_FW_VER_ADDR))) = "FW_VER_V002.002";
-#endif
+// #define APROM_FW_VER_ADDR      		            (APROM_APPLICATION_START+FMC_FLASH_PAGE_SIZE)
+// //put F/W verison at 2nd page , for indicator
+// #if defined (APROM_1)
+// const uint8_t FW_Version[] __attribute__((at(APROM_FW_VER_ADDR))) = "FW_VER_V001.001";
+// #elif defined (APROM_2)
+// const uint8_t FW_Version[] __attribute__((at(APROM_FW_VER_ADDR))) = "FW_VER_V002.002";
+// #endif
 
 #define DEBUG_UART_PORT							(UART1)
 #define DEBUG_UART_PORT_IRQn					(UART1_IRQn)
@@ -50,8 +52,11 @@ const uint8_t FW_Version[] __attribute__((at(APROM_FW_VER_ADDR))) = "FW_VER_V002
 // #define DATA_FLASH_AMOUNT						(48)
 // #define DATA_FLASH_PAGE  						(4)     // flash page : 0x200 (512)
 
-#define __noinit__ __attribute__((zero_init))
-__noinit__ int flag_check_ISP_process __attribute__((at( 0x20001FFC)));
+// #define __noinit__ __attribute__((zero_init))
+// __noinit__ int flag_check_ISP_process __attribute__((at( 0x20001FFC)));
+
+//use excel to calculate , boot code : 12K (0x3000) , application : 52K  (0xD000) 
+#define CHECKSUM_ADDRESS                        (0xCFFC)
 
 #define RST_ADDR_LDROM                          (0)
 #define RST_ADDR_APROM                          (1)
@@ -196,104 +201,56 @@ void delay_ms(uint16_t ms)
 	TIMER_Delay(TIMER0, 1000*ms);
 }
 
-
-void SystemReboot_RST(unsigned char addr , unsigned char sel)
+void FMC_ISP(uint32_t u32Cmd, uint32_t u32Addr, uint32_t u32Data)
 {
-    while(!UART_IS_TX_EMPTY(UART1));
-        
-    /* Unlock protected registers */
-    SYS_UnlockReg();
-    /* Enable FMC ISP function */
-    FMC_Open();
+    uint32_t u32TimeOutCnt;
 
-    switch(addr) // CONFIG: w/ IAP
-    {
-        case RST_ADDR_LDROM:
-            /* Mask all interrupt before changing VECMAP to avoid wrong interrupt handler fetched */
-            __set_PRIMASK(1);    
-            FMC_SetVectorPageAddr(FMC_LDROM_BASE);
-            FMC_SET_LDROM_BOOT();        
-            break;
-        case RST_ADDR_APROM:
-            /* Mask all interrupt before changing VECMAP to avoid wrong interrupt handler fetched */
-            __set_PRIMASK(1);    
-            FMC_SetVectorPageAddr(FMC_APROM_BASE);
-            FMC_SET_APROM_BOOT();        
-            break;            
-    }
-
-    switch(sel)
-    {
-        case RST_SEL_NVIC:  // Reset I/O and peripherals , only check BS(FMC_ISPCTL[1])
-            NVIC_SystemReset();
-            break;
-        case RST_SEL_CPU:   // Not reset I/O and peripherals
-            SYS_ResetCPU();
-            break;   
-        case RST_SEL_CHIP:
-            SYS_ResetChip();// Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)
-            break;                       
-    } 
-}
-
-
-void IAPSystemReboot_RST(unsigned char addr , unsigned char sel)
-{
-    while(!UART_IS_TX_EMPTY(UART1));
-        
-    /* Unlock protected registers */
-    SYS_UnlockReg();
-    /* Enable FMC ISP function */
-    FMC_Open();
-
-    switch(addr) // CONFIG: w/ IAP
-    {
-        case RST_ADDR_LDROM:
-            /* Mask all interrupt before changing VECMAP to avoid wrong interrupt handler fetched */
-            __set_PRIMASK(1);    
-            FMC_SetVectorPageAddr(FMC_APROM_BASE);
-            FMC_SET_APROM_BOOT();        
-            break;
-        case RST_ADDR_APROM:
-            /* Mask all interrupt before changing VECMAP to avoid wrong interrupt handler fetched */
-            __set_PRIMASK(1);    
-            FMC_SetVectorPageAddr(APROM_APPLICATION_START);
-            FMC_SET_APROM_BOOT();        
-            break;            
-    }
-
-    switch(sel)
-    {
-        case RST_SEL_NVIC:  // Reset I/O and peripherals , only check BS(FMC_ISPCTL[1])
-            NVIC_SystemReset();
-            break;
-        case RST_SEL_CPU:   // Not reset I/O and peripherals
-            SYS_ResetCPU();
-            break;   
-        case RST_SEL_CHIP:
-            SYS_ResetChip();// Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)
-            break;                       
-    } 
-}
-
-
-uint8_t read_magic_tag(void)
-{
-    uint8_t tag = 0;
-
-    tag = (uint8_t) flag_check_ISP_process;
-
-    printf("Read MagicTag <0x%02X>\r\n", tag);
+    FMC_ENABLE_AP_UPDATE();    
     
-    return tag;
+    FMC->ISPCMD = u32Cmd;
+    FMC->ISPADR = u32Addr;
+    FMC->ISPDAT = u32Data;
+    FMC->ISPTRG = FMC_ISPTRG_ISPGO_Msk;
+    __ISB();                                    /* To make sure ISP/CPU be Synchronized */
+    
+    u32TimeOutCnt = FMC_TIMEOUT_READ;
+    while(FMC->ISPTRG & FMC_ISPTRG_ISPGO_Msk)    /* Waiting for ISP Done */
+    {
+        if(--u32TimeOutCnt == 0)
+        {
+            // g_FMC_i32ErrCode = -1;
+            while(1);
+        }
+    }
 }
 
-void write_magic_tag(uint8_t tag)
+void erase_checksum(uint32_t u32Addr, uint32_t u32Data)
 {
-    flag_check_ISP_process = tag;    
+    uint32_t res = 0;
 
-    printf("Write MagicTag <0x%02X>\r\n", tag);
+    printf("%s:0x%8X,0x%8X\r\n",__FUNCTION__,u32Addr,u32Data);
+    while(!UART_IS_TX_EMPTY(DEBUG_UART_PORT));
+
+    SYS_UnlockReg();
+    CLK->AHBCLK |= CLK_AHBCLK_ISP_EN_Msk;
+    // FMC->ISPCTL |= FMC_ISPCTL_ISPEN_Msk | FMC_ISPCTL_APUEN_Msk;
+    FMC_Open();
+    FMC_ENABLE_AP_UPDATE();
+
+    res = FMC_Read(u32Addr);
+    printf("%s:0x%8X, result:0x%8X(before)\r\n" ,__FUNCTION__, u32Addr , res);
+   
+    if ((u32Addr & (FMC_FLASH_PAGE_SIZE - 1)) == 0)
+        FMC_ISP(FMC_ISPCMD_PAGE_ERASE, u32Addr, 0);
+
+
+    FMC_ISP(FMC_ISPCMD_PROGRAM, u32Addr, u32Data);
+
+    res = FMC_Read(u32Addr);
+    printf("%s:0x%8X, result:0x%8X(after)\r\n" ,__FUNCTION__, u32Addr , res);
+
 }
+
 
 
 void GPIO_Init (void)
@@ -470,6 +427,39 @@ void TIMER1_Init(void)
     TIMER_Start(TIMER1);
 }
 
+
+void loop(void)
+{
+	// static uint32_t LOG1 = 0;
+	// static uint32_t LOG2 = 0;
+
+    if (FLAG_PROJ_ERASE_CHECKSUM)
+    {
+        FLAG_PROJ_ERASE_CHECKSUM  = 0;
+
+        // clear check sum to force update APROM when return to boot code
+        erase_checksum(CHECKSUM_ADDRESS , 0x00000000);
+
+        printf("Perform RST to enter BOOTLOADER\r\n");
+
+        /* Unlock protected registers */
+        SYS_UnlockReg();
+        /* Enable FMC ISP function */
+        FMC_Open();
+
+        __set_PRIMASK(1);    
+        FMC_SetVectorPageAddr(FMC_APROM_BASE);
+
+        // Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)
+        SYS_ResetChip();
+
+        // FMC_DISABLE_AP_UPDATE();           /* Disable APROM update. */
+        FMC_Close();                       /* Disable FMC ISP function */
+        SYS_LockReg();                     /* Lock protected registers */  
+    }    
+
+}
+
 void UARTx_Process(void)
 {
 	uint8_t res = 0;
@@ -484,18 +474,17 @@ void UARTx_Process(void)
 		switch(res)
 		{
 			case '1':
+                FLAG_PROJ_ERASE_CHECKSUM = 1;
 				break;
 
 			case 'X':
 			case 'x':
 			case 'Z':
 			case 'z':
-    			read_magic_tag();			
-	            write_magic_tag(0xA5);
-    			read_magic_tag();
-
-	            printf("Perform RST to enter BOOTLOADER\r\n");
-	            IAPSystemReboot_RST(RST_ADDR_LDROM,RST_SEL_CPU);	
+                SYS_UnlockReg();
+				// NVIC_SystemReset();	// Reset I/O and peripherals , only check BS(FMC_ISPCTL[1])
+                // SYS_ResetCPU();     // Not reset I/O and peripherals
+                SYS_ResetChip();    // Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)	
 				break;
 		}
 	}
@@ -587,8 +576,6 @@ int main()
 	DEBUG_UART_Init();
 	TIMER1_Init();
 
-    read_magic_tag();// for debug
-
     #if defined (ENABLE_TICK_EVENT)
     enable_sys_tick(1000);
     TickSetTickEvent(1000, TickCallback_processA);  // 1000 ms
@@ -598,7 +585,7 @@ int main()
     /* Got no where to go, just loop forever */
     while(1)
     {
-
+        loop();
 
     }
 }

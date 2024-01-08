@@ -289,48 +289,25 @@ unsigned long UPDC32(unsigned char octet, unsigned long crc)
 //
 uint8_t check_reset_source(void)
 {
-    uint8_t tag = 0;
     uint32_t src = SYS_GetResetSrc();
 
     SYS->RSTSRC |= 0xFF;
     LDROM_DEBUG("Reset Source <0x%08X>\r\n", src);
-   
-    tag = read_magic_tag();
-    
+       
     if (src & SYS_RSTSRC_RSTS_POR_Msk) 
     {
-        SYS_ClearResetSrc(SYS_RSTSRC_RSTS_POR_Msk);            
-        if (tag == 0xA5) {
-            write_magic_tag(0);
-            LDROM_DEBUG("Enter BOOTLOADER from APPLICATION(POR)\r\n");
-            return TRUE;
-        } else if (tag == 0xBB) {
-            write_magic_tag(0);
-            LDROM_DEBUG("Upgrade finished...(POR)\r\n");
-            return FALSE;
-        } else {
-            LDROM_DEBUG("Enter BOOTLOADER from POR\r\n");
-            return FALSE;
-        }
+        SYS_ClearResetSrc(SYS_RSTSRC_RSTS_POR_Msk);
+        LDROM_DEBUG("power on from POR\r\n");
+        return FALSE;         
     } else if (src & SYS_RSTSRC_RSTS_CPU_Msk)
     {
-        SYS_ClearResetSrc(SYS_RSTSRC_RSTS_CPU_Msk);        
-        if (tag == 0xA5) {
-            write_magic_tag(0);
-            LDROM_DEBUG("Enter BOOTLOADER from APPLICATION(CPU)\r\n");
-            return TRUE;
-        } else if (tag == 0xBB) {
-            write_magic_tag(0);
-            LDROM_DEBUG("Upgrade finished...(CPU)\r\n");
-            return FALSE;
-        } else {
-            LDROM_DEBUG("Enter BOOTLOADER from CPU reset\r\n");
-            return FALSE;
-        }          
+        SYS_ClearResetSrc(SYS_RSTSRC_RSTS_CPU_Msk); 
+        LDROM_DEBUG("power on from CPU reset\r\n");
+        return FALSE;         
     } else if (src & SYS_RSTSRC_RSTS_RESET_Msk)
     {
         SYS_ClearResetSrc(SYS_RSTSRC_RSTS_RESET_Msk);
-        LDROM_DEBUG("Enter BOOTLOADER from nRESET pin\r\n");
+        LDROM_DEBUG("power on from nRESET pin\r\n");
         return FALSE;
     }
     
@@ -561,7 +538,10 @@ void UARTx_Process(void)
 			case 'x':
 			case 'Z':
 			case 'z':
-				NVIC_SystemReset();		
+                SYS_UnlockReg();
+				// NVIC_SystemReset();	// Reset I/O and peripherals , only check BS(FMC_ISPCTL[1])
+                // SYS_ResetCPU();     // Not reset I/O and peripherals
+                SYS_ResetChip();    // Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)		
 				break;
 		}
 	}
@@ -646,8 +626,7 @@ void SYS_Init(void)
 int main()
 {
     uint32_t lcmd;
-    uint32_t fw_addr = 0;
-    uint8_t i = 0;    
+    // uint8_t i = 0;    
     uint8_t buffer[16] = {0};
 
     /* Unlock protected registers */
@@ -724,10 +703,8 @@ int main()
             // while(!UART_IS_TX_EMPTY(DEBUG_UART_PORT));
         
             // // Reset chip to enter bootloader
-            // SYS_UnlockReg();
-            // SYS_ResetChip();
-            
-            IAPSystemReboot_RST(RST_ADDR_LDROM,RST_SEL_CHIP);
+            SYS_UnlockReg();
+            SYS_ResetChip();
         }
 
     }
@@ -746,17 +723,23 @@ _ISP:
 
 
 exit:
-    fw_addr = APROM_FW_VER_ADDR;
-    for (i = 0 ; i <16 ; i++)
-    {
-        buffer[i] = *(__IO uint8_t *)fw_addr;
-        fw_addr++;
-    }
     LDROM_DEBUG("Jump to <APPLICATION>,%s\r\n",buffer);
     while(!UART_IS_TX_EMPTY(DEBUG_UART_PORT));
     
     #if 1
-    IAPSystemReboot_RST(RST_ADDR_APROM,RST_SEL_CPU);
+
+    /* Unlock protected registers */
+    SYS_UnlockReg();
+    /* Enable FMC ISP function */
+    FMC_Open();
+
+    __set_PRIMASK(1);    
+    FMC_SetVectorPageAddr(APROM_APPLICATION_START);
+
+    // // Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)
+    // SYS_ResetChip();
+  // Not reset I/O and peripherals
+    SYS_ResetCPU();
 
     #else
     /* Reset system and boot from APROM */

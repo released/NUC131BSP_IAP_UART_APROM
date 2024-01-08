@@ -42,13 +42,6 @@ update @ 2022/07/04
 		
 ![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/ISP_connect.jpg)
 
-		- when ISP upgrade finish 
-		
-![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/LDROM_upgrade_finish.jpg)
-
-		- if reset from application code , will entry timeout counting , jump to application code if TIMEOUT		
-
-![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/APROM_press_Z_timeout.jpg)
 
 	
 	- Application code project : AP
@@ -80,10 +73,6 @@ update @ 2022/07/04
 ![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/APROM_SRecord_cmd_file.jpg)
 		
 		- after project compile finish , binary size will be 52K (total application code size : 0xD000)
-		
-		- under terminal , use keyboard , 'z' , 'Z' , will write specific value in SRAM flag , and return to boot loader
-	
-![image](https://github.com/released/NUC131BSP_IAP_UART_APROM/blob/main/KEIL_SRAM_alloction_for_LDROM_APOM.jpg)
 			
 	- reserve data flash address : 0x10000 , 4K
 	

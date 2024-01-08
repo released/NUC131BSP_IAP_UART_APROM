@@ -11,8 +11,8 @@
 #include "ISP_USER.h"
 #include "NUC131.h" 
 
-#define __noinit__ __attribute__((zero_init))
-__noinit__ int flag_check_ISP_process __attribute__((at( 0x20001FFC)));
+// #define __noinit__ __attribute__((zero_init))
+// __noinit__ int flag_check_ISP_process __attribute__((at( 0x20001FFC)));
 
 __align(4) uint8_t response_buff[64];
 __align(4) static uint8_t aprom_buf[FMC_FLASH_PAGE_SIZE];
@@ -96,25 +96,6 @@ void IAPSystemReboot_RST(unsigned char addr , unsigned char sel)
             SYS_ResetChip();// Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)
             break;                       
     } 
-}
-
-
-uint8_t read_magic_tag(void)
-{
-    uint8_t tag = 0;
-
-    tag = (uint8_t) flag_check_ISP_process;
-
-    LDROM_DEBUG("Read MagicTag <0x%02X>\r\n", tag);
-    
-    return tag;
-}
-
-void write_magic_tag(uint8_t tag)
-{
-    flag_check_ISP_process = tag;    
-
-    LDROM_DEBUG("Write MagicTag <0x%02X>\r\n", tag);
 }
 
 static uint16_t Checksum(unsigned char *buf, int len)
@@ -220,9 +201,7 @@ int ParseCmd(unsigned char *buffer, uint8_t len)
         goto out;
     } else if (lcmd == CMD_RUN_APROM || lcmd == CMD_RUN_LDROM || lcmd == CMD_RESET) {
     	
- 		#if 1
-        write_magic_tag(0xBB); 
-        
+ 		#if 1        
         //
         // In order to verify the checksum in the application, 
         // do CHIP_RST to enter bootloader again.
@@ -231,8 +210,18 @@ int ParseCmd(unsigned char *buffer, uint8_t len)
         // while(!UART_IS_TX_EMPTY(UART1));        
         // SYS_UnlockReg();
         // SYS_ResetChip();
-        
-        IAPSystemReboot_RST(RST_ADDR_LDROM,RST_SEL_CPU);        
+        LDROM_DEBUG("ISP flow :Perform RST...\r\n");
+
+        /* Unlock protected registers */
+        SYS_UnlockReg();
+        /* Enable FMC ISP function */
+        FMC_Open();
+
+        __set_PRIMASK(1);    
+        FMC_SetVectorPageAddr(FMC_APROM_BASE);
+
+        // Reset I/O and peripherals ,  BS(FMC_ISPCTL[1]) reload from CONFIG setting (CBS)
+        SYS_ResetChip();
 		#else   	
     	
         outpw(&SYS->RSTSRC, 3);//clear bit

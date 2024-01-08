@@ -21,7 +21,7 @@
 
 #define APROM_APPLICATION_START     		0x00003000UL
 #define APROM_APPLICATION_SIZE      		0x0000D000UL
-#define APROM_FW_VER_ADDR      		        (APROM_APPLICATION_START+FMC_FLASH_PAGE_SIZE)
+// #define APROM_FW_VER_ADDR      		        (APROM_APPLICATION_START+FMC_FLASH_PAGE_SIZE)
 
 #include "FMC_USER.h"
 
@@ -64,8 +64,6 @@ extern uint32_t g_apromSize, g_dataFlashAddr, g_dataFlashSize;
 
 void SystemReboot_RST(unsigned char addr , unsigned char sel);
 void IAPSystemReboot_RST(unsigned char addr , unsigned char sel);
-uint8_t read_magic_tag(void);
-void write_magic_tag(uint8_t tag);
 
 extern __align(4) uint8_t usb_rcvbuf[];
 extern __align(4) uint8_t usb_sendbuf[];
